@@ -26,6 +26,8 @@ jobs:
         uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: latest
+      - name: Setup Vite
+        run: npm install -g vite
       - name: Install dependencies
         run: bun install
       - name: Run package
@@ -48,6 +50,8 @@ jobs:
         uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: latest
+      - name: Setup Vite
+        run: npm install -g vite
       - name: Install dependencies
         run: bun install
       - name: Run package
