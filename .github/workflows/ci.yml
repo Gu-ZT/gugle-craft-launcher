@@ -22,8 +22,10 @@ jobs:
         uses: actions/setup-node@v6.4.0
         with:
           node-version: '22'
-      - name: Install Bun
-        run: curl -fsSL https://bun.sh/install | bash
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: latest
       - name: Install dependencies
         run: bun install
       - name: Run package
@@ -42,8 +44,10 @@ jobs:
         uses: actions/setup-node@v6.4.0
         with:
           node-version: '22'
-      - name: Install Bun
-        run: powershell -c "irm bun.sh/install.ps1 | iex"
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: latest
       - name: Install dependencies
         run: bun install
       - name: Run package
