@@ -36,7 +36,8 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: linux-build-artifact
-          path: build/
+          path: | 
+            build/canary-linux-x64/gugle-craft-launcher-canary/
   build-windows:
     runs-on: windows-latest
     steps:
@@ -60,4 +61,10 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: win-build-artifact
-          path: build/
+          path: |
+            build/canary-win-x64/temp-bun-icon.ico
+            build/canary-win-x64/temp-icon.ico
+            build/canary-win-x64/temp-launcher-icon.ico
+            build/canary-win-x64/gugle-craft-launcher-Setup-canary.tar.zst
+            build/canary-win-x64/gugle-craft-launcher-Setup-canary.metadata.json
+            build/canary-win-x64/gugle-craft-launcher-Setup-canary.exe
