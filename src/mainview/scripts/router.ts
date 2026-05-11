@@ -1,5 +1,8 @@
 import StartPage from "@renderer/views/StartPage.vue";
 import {createRouter, createWebHistory, RouteRecordRaw} from "vue-router";
+import DownloadPage from "@renderer/views/DownloadPage.vue";
+import SettingsPage from "@renderer/views/SettingsPage.vue";
+import AppsPage from "@renderer/views/AppsPage.vue";
 
 
 export type Page = 'start' | 'download' | 'settings' | 'apps';
@@ -13,12 +16,10 @@ export const pageMap: Record<Page, string> = {
 
 const routes: RouteRecordRaw[] = [
     {path: pageMap.start, component: StartPage},
-    {path: pageMap.download, component: StartPage},
-    {path: pageMap.settings, component: StartPage},
-    {path: pageMap.apps, component: StartPage}
+    {path: pageMap.download, component: DownloadPage},
+    {path: pageMap.settings, component: SettingsPage},
+    {path: pageMap.apps, component: AppsPage}
 ]
-
-console.log(routes)
 
 export const router = createRouter({
     history: createWebHistory(),
