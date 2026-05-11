@@ -1,6 +1,6 @@
 import {defineElectrobunRPC, Utils} from "electrobun";
-import {AppRPCSchema} from "../shared/rpc-define";
-import {mainWindow} from "./";
+import {AppRPCSchema} from "@shared/rpc-define";
+import {mainWindow} from "./index";
 
 async function exit(params: { exit: boolean }) {
     if (!params.exit) return params;

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import {rpc} from "./scripts/rpc";
+import {rpc} from "@renderer/scripts/rpc";
 import {onMounted, ref} from "vue";
-import StartPage from "./views/StartPage.vue";
-import AppsPage from "./views/AppsPage.vue";
-import DownloadPage from "./views/DownloadPage.vue";
-import SettingsPage from "./views/SettingsPage.vue";
+import StartPage from "@renderer/views/StartPage.vue";
+import AppsPage from "@renderer/views/AppsPage.vue";
+import DownloadPage from "@renderer/views/DownloadPage.vue";
+import SettingsPage from "@renderer/views/SettingsPage.vue";
 
 async function quit() {
   await rpc.request.exit({exit: true});

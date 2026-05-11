@@ -12,7 +12,16 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true,
-		"moduleResolution": "bundler"
+		"moduleResolution": "bundler",
+		"baseUrl": ".",
+		"paths": {
+			"@shared/*": [
+				"src/shared/*"
+			],
+			"@renderer/*": [
+				"src/mainview/*"
+			]
+		}
 	},
 	"include": ["src", "env.d.ts"],
 	"exclude": ["node_modules", "dist", "build", "../../package/dist"]

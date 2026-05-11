@@ -1,4 +1,4 @@
-import {AppRPCSchema} from "../../shared/rpc-define";
+import {AppRPCSchema} from "@shared/rpc-define";
 import {Electroview} from "electrobun/view";
 
 
