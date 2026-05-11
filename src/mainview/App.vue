@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {rpc} from "@renderer/scripts/rpc";
 import {onMounted, ref} from "vue";
-import StartPage from "@renderer/views/StartPage.vue";
-import AppsPage from "@renderer/views/AppsPage.vue";
-import DownloadPage from "@renderer/views/DownloadPage.vue";
-import SettingsPage from "@renderer/views/SettingsPage.vue";
+import {Page, pageMap} from "@renderer/scripts/router";
+import {useRouter} from 'vue-router'
+
+const router = useRouter()
 
 async function quit() {
   await rpc.request.exit({exit: true});
@@ -36,10 +36,11 @@ function toggleDark() {
   }
 }
 
-type Page = 'start' | 'download' | 'settings' | 'apps';
 const selectPage = ref<Page>("start");
 
 function togglePage(page: Page) {
+  console.log(page, pageMap[page]);
+  router.replace(pageMap[page]);
   selectPage.value = page;
 }
 </script>
@@ -89,10 +90,7 @@ function togglePage(page: Page) {
     </a-page-header>
     <a-scrollbar class="page-content">
       <div class="page-content">
-        <start-page v-if="selectPage==='start'"/>
-        <download-page v-if="selectPage==='download'"/>
-        <settings-page v-if="selectPage==='settings'"/>
-        <apps-page v-if="selectPage==='apps'"/>
+        <router-view/>
       </div>
     </a-scrollbar>
   </div>
