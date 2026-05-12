@@ -7,16 +7,17 @@ import {useRouter} from 'vue-router'
 const router = useRouter()
 
 async function quit() {
-  await rpc.request.exit({exit: true});
+  await rpc.request.exit();
 }
 
 async function minimize() {
-  await rpc.request.minimize({minimize: true});
+  await rpc.request.minimize();
 }
 
 const isDark = ref<boolean>(false);
 
 onMounted(() => {
+  router.replace(pageMap["start"]);
   isDark.value = localStorage.getItem('theme') === 'dark';
   if (isDark.value) {
     document.body.setAttribute('arco-theme', 'dark');
@@ -39,7 +40,6 @@ function toggleDark() {
 const selectPage = ref<Page>("start");
 
 function togglePage(page: Page) {
-  console.log(page, pageMap[page]);
   router.replace(pageMap[page]);
   selectPage.value = page;
 }

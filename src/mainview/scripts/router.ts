@@ -8,7 +8,7 @@ import AppsPage from "@renderer/views/AppsPage.vue";
 export type Page = 'start' | 'download' | 'settings' | 'apps';
 
 export const pageMap: Record<Page, string> = {
-    start: "/",
+    start: "/start",
     download: "/download",
     settings: "/settings",
     apps: "/apps"
