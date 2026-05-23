@@ -8,6 +8,12 @@ import {
     ModrinthVersion,
     ModTagsResponse,
 } from "@shared/modrinth";
+import {
+    CurseSearchParams,
+    CurseforgeSearchResponse,
+    CurseforgeProject,
+    CurseforgeFilesResponse,
+} from "@shared/curseforge";
 
 export interface AppRPCSchema extends RPCSchema {
     bun: {
@@ -36,6 +42,7 @@ export interface AppRPCSchema extends RPCSchema {
                 params: void,
                 response: VersionManifest
             },
+            // Modrinth
             searchMods: {
                 params: ModSearchParams,
                 response: ModSearchResponse,
@@ -55,6 +62,23 @@ export interface AppRPCSchema extends RPCSchema {
             getModTags: {
                 params: void,
                 response: ModTagsResponse,
+            },
+            // CurseForge
+            searchCurseMods: {
+                params: CurseSearchParams,
+                response: CurseforgeSearchResponse,
+            },
+            getCurseProject: {
+                params: { projectId: number },
+                response: CurseforgeProject,
+            },
+            getCurseFiles: {
+                params: { projectId: number },
+                response: CurseforgeFilesResponse,
+            },
+            downloadCurseFile: {
+                params: { downloadUrl: string; filename: string },
+                response: { success: boolean; path?: string; error?: string },
             },
         },
         messages: {}

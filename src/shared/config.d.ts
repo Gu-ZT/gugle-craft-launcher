@@ -1,10 +1,13 @@
 export type DownloadSource = 'official' | 'mirror' | 'official_preference';
 export type VersionSource = DownloadSource;
+export type ModApiSource = 'modrinth' | 'curseforge';
 
 export interface DownloadConfig {
     download_source: DownloadSource;
     version_source: VersionSource;
     mod_source: DownloadSource;
+    mod_api_source: ModApiSource;
+    curseforge_api_key?: string;
 }
 
 export type VersionIsolation = 'all' | 'none' | 'mod' | 'informal' | 'mod_informal';

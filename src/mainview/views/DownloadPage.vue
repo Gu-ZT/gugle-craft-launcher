@@ -8,6 +8,13 @@ import {
     ModrinthVersion,
     ModTagsResponse,
 } from "@shared/modrinth";
+import {
+    CurseSearchParams,
+    CurseforgeSearchResponse,
+    CurseforgeProject,
+    CurseforgeFile,
+    CurseforgeFilesResponse,
+} from "@shared/curseforge";
 import {rpc} from "@renderer/scripts/rpc";
 import {Message} from "@arco-design/web-vue";
 
@@ -44,12 +51,17 @@ function handleTabClick(key: string) {
 
 // ---- 模组浏览器 ----
 type ViewState = 'browse' | 'detail' | 'versions';
+type ApiSource = 'modrinth' | 'curseforge';
 
+const apiSource = ref<ApiSource>('modrinth');
 const viewState = ref<ViewState>('browse');
 const searchQuery = ref<string>('');
-const searchResults = ref<ModSearchResponse | null>(null);
-const selectedProject = ref<ModrinthProject | null>(null);
-const projectVersions = ref<ModrinthVersion[]>([]);
+const modSearchResults = ref<ModSearchResponse | null>(null);
+const curseSearchResults = ref<CurseforgeSearchResponse | null>(null);
+const modProject = ref<ModrinthProject | null>(null);
+const curseProject = ref<CurseforgeProject | null>(null);
+const modVersions = ref<ModrinthVersion[]>([]);
+const curseFiles = ref<CurseforgeFile[]>([]);
 const tags = ref<ModTagsResponse | null>(null);
 const loading = ref<boolean>(false);
 const selectedLoader = ref<string>('');
@@ -60,6 +72,79 @@ const pageSize = 20;
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
+/** 当前是否使用 CurseForge 源 */
+const isCurse = () => apiSource.value === 'curseforge';
+
+/** 当前搜索总命中数 */
+const totalHits = () => {
+    if (isCurse()) return curseSearchResults.value?.pagination.totalCount ?? 0;
+    return modSearchResults.value?.total_hits ?? 0;
+};
+
+/** 搜索结果的条目列表用于模板渲染 */
+interface SearchHitItem {
+    id: string | number;
+    slugOrId: string | number;
+    title: string;
+    description: string;
+    iconUrl: string;
+    categories: string[];
+    downloads: number;
+}
+const currentHits = (): SearchHitItem[] => {
+    if (isCurse()) {
+        return (curseSearchResults.value?.data ?? []).map(p => ({
+            id: p.id,
+            slugOrId: p.id,
+            title: p.name,
+            description: p.summary,
+            iconUrl: p.logo?.thumbnailUrl ?? '',
+            categories: p.categories?.map(c => c.name) ?? [],
+            downloads: p.downloadCount,
+        }));
+    }
+    return (modSearchResults.value?.hits ?? []).map(h => ({
+        id: h.project_id,
+        slugOrId: h.slug,
+        title: h.title,
+        description: h.description,
+        iconUrl: h.icon_url ? iconUrl(h.icon_url) : '',
+        categories: h.display_categories ?? [],
+        downloads: h.downloads,
+    }));
+};
+
+/** 当前选中项目的详情数据 */
+const projectInfo = () => {
+    if (isCurse() && curseProject.value) {
+        const p = curseProject.value;
+        return {
+            title: p.name,
+            description: p.summary,
+            body: '', // CurseForge doesn't return body from search/project endpoint
+            iconUrl: p.logo?.thumbnailUrl ?? '',
+            downloads: p.downloadCount,
+            followers: 0,
+            license: '',
+            versionCount: p.latestFiles?.length ?? 0,
+        };
+    }
+    if (modProject.value) {
+        const p = modProject.value;
+        return {
+            title: p.title,
+            description: p.description,
+            body: p.body,
+            iconUrl: p.icon_url ? iconUrl(p.icon_url) : '',
+            downloads: p.downloads,
+            followers: p.followers,
+            license: p.license?.name ?? '',
+            versionCount: p.versions?.length ?? 0,
+        };
+    }
+    return null;
+};
+
 /** 加载标签（仅首次进入模组标签时） */
 async function loadTags() {
     try {
@@ -69,7 +154,7 @@ async function loadTags() {
     }
 }
 
-/** 构建搜索 facet */
+/** 构建搜索 facet（仅 Modrinth） */
 function buildFacets(): string[][] {
     const facets: string[][] = [["project_type:mod"]];
     if (selectedLoader.value) {
@@ -88,18 +173,41 @@ async function doSearch() {
     viewState.value = 'browse';
     currentPage.value = 1;
     try {
-        searchResults.value = await rpc.request.searchMods({
-            query: searchQuery.value,
-            facets: buildFacets(),
-            offset: 0,
-            limit: pageSize,
-            index: sortIndex.value as ModSearchParams['index'],
-        });
+        if (isCurse()) {
+            const params: CurseSearchParams = {
+                query: searchQuery.value,
+                pageSize,
+                index: (currentPage.value - 1) * pageSize,
+                sortOrder: 'desc',
+                gameVersion: selectedGameVersion.value || undefined,
+                modLoaderType: selectedLoader.value ? loaderToCurseforgeType(selectedLoader.value) : undefined,
+            };
+            curseSearchResults.value = await rpc.request.searchCurseMods(params);
+            modSearchResults.value = null;
+        } else {
+            modSearchResults.value = await rpc.request.searchMods({
+                query: searchQuery.value,
+                facets: buildFacets(),
+                offset: 0,
+                limit: pageSize,
+                index: sortIndex.value as ModSearchParams['index'],
+            });
+            curseSearchResults.value = null;
+        }
     } catch (e: any) {
         Message.error(e?.message ?? "搜索失败");
     } finally {
         loading.value = false;
     }
+}
+
+/** CurseForge 加载器名称 → modLoaderType 映射 */
+function loaderToCurseforgeType(loader: string): number | undefined {
+    const map: Record<string, number> = {
+        forge: 1, neoforge: 1,
+        fabric: 4, quilt: 5,
+    };
+    return map[loader.toLowerCase()];
 }
 
 /** 搜索输入防抖 */
@@ -113,13 +221,23 @@ async function goPage(page: number) {
     currentPage.value = page;
     loading.value = true;
     try {
-        searchResults.value = await rpc.request.searchMods({
-            query: searchQuery.value,
-            facets: buildFacets(),
-            offset: (page - 1) * pageSize,
-            limit: pageSize,
-            index: sortIndex.value as ModSearchParams['index'],
-        });
+        if (isCurse()) {
+            curseSearchResults.value = await rpc.request.searchCurseMods({
+                query: searchQuery.value,
+                pageSize,
+                index: (page - 1) * pageSize,
+                sortOrder: 'desc',
+                gameVersion: selectedGameVersion.value || undefined,
+            });
+        } else {
+            modSearchResults.value = await rpc.request.searchMods({
+                query: searchQuery.value,
+                facets: buildFacets(),
+                offset: (page - 1) * pageSize,
+                limit: pageSize,
+                index: sortIndex.value as ModSearchParams['index'],
+            });
+        }
     } catch (e: any) {
         Message.error(e?.message ?? "搜索失败");
     } finally {
@@ -127,16 +245,22 @@ async function goPage(page: number) {
     }
 }
 
-/** 过滤器变化时重新搜索 */
-watch([selectedLoader, selectedGameVersion, sortIndex], () => {
-    if (searchResults.value) doSearch();
+/** 过滤器/API源变化时重新搜索 */
+watch([selectedLoader, selectedGameVersion, sortIndex, apiSource], () => {
+    if (modSearchResults.value || curseSearchResults.value) doSearch();
 });
 
 /** 打开模组详情 */
-async function openProject(slug: string) {
+async function openProject(slugOrId: string | number) {
     loading.value = true;
     try {
-        selectedProject.value = await rpc.request.getModProject({slug});
+        if (isCurse()) {
+            curseProject.value = await rpc.request.getCurseProject({projectId: slugOrId as number});
+            modProject.value = null;
+        } else {
+            modProject.value = await rpc.request.getModProject({slug: slugOrId as string});
+            curseProject.value = null;
+        }
         viewState.value = 'detail';
     } catch (e: any) {
         Message.error(e?.message ?? "获取模组信息失败");
@@ -145,14 +269,22 @@ async function openProject(slug: string) {
     }
 }
 
-/** 查看版本列表 */
+/** 查看版本/文件列表 */
 async function loadVersions() {
-    if (!selectedProject.value) return;
     loading.value = true;
     try {
-        projectVersions.value = await rpc.request.getModVersions({
-            slug: selectedProject.value.slug,
-        });
+        if (isCurse() && curseProject.value) {
+            const resp: CurseforgeFilesResponse = await rpc.request.getCurseFiles({
+                projectId: curseProject.value.id,
+            });
+            curseFiles.value = resp.data;
+            modVersions.value = [];
+        } else if (modProject.value) {
+            modVersions.value = await rpc.request.getModVersions({
+                slug: modProject.value.slug,
+            });
+            curseFiles.value = [];
+        }
         viewState.value = 'versions';
     } catch (e: any) {
         Message.error(e?.message ?? "获取版本列表失败");
@@ -161,8 +293,8 @@ async function loadVersions() {
     }
 }
 
-/** 下载模组文件 */
-async function downloadFile(version: ModrinthVersion) {
+/** 下载 Modrinth 模组文件 */
+async function downloadModFile(version: ModrinthVersion) {
     const primary = version.files.find((f) => f.primary) ?? version.files[0];
     if (!primary) return;
     Message.loading("开始下载...");
@@ -173,6 +305,25 @@ async function downloadFile(version: ModrinthVersion) {
         });
         if (result.success) {
             Message.success(`下载完成: ${primary.filename}`);
+        } else {
+            Message.error(result.error ?? "下载失败");
+        }
+    } catch (e: any) {
+        Message.error(e?.message ?? "下载失败");
+    }
+}
+
+/** 下载 CurseForge 文件 */
+async function downloadCurseFile(file: CurseforgeFile) {
+    if (!file.downloadUrl) return;
+    Message.loading("开始下载...");
+    try {
+        const result = await rpc.request.downloadCurseFile({
+            downloadUrl: file.downloadUrl,
+            filename: file.fileName,
+        });
+        if (result.success) {
+            Message.success(`下载完成: ${file.fileName}`);
         } else {
             Message.error(result.error ?? "下载失败");
         }
@@ -228,9 +379,7 @@ function iconUrl(url: string | null): string {
             <a-collapse :default-active-key="['1']" accordion>
                 <a-collapse-item header="正式版" key="release">
                     <a-card v-for="version in versions" :key="version.id" class="version-card">
-                        <div class="version-card-id">
-                            {{ version.id }}
-                        </div>
+                        <div class="version-card-id">{{ version.id }}</div>
                         <div class="version-card-date-time">
                             <div class="version-card-date">
                                 {{ (new Date(Date.parse(version.releaseTime))).toLocaleDateString() }}
@@ -243,9 +392,7 @@ function iconUrl(url: string | null): string {
                 </a-collapse-item>
                 <a-collapse-item header="快照版" key="snapshot">
                     <a-card v-for="version in snapshot" :key="version.id" class="version-card">
-                        <div class="version-card-id">
-                            {{ version.id }}
-                        </div>
+                        <div class="version-card-id">{{ version.id }}</div>
                         <div class="version-card-date-time">
                             <div class="version-card-date">
                                 {{ (new Date(Date.parse(version.releaseTime))).toLocaleDateString() }}
@@ -270,12 +417,16 @@ function iconUrl(url: string | null): string {
                             v-model="searchQuery"
                             placeholder="搜索模组..."
                             :button-text="'搜索'"
-                            style="width: 320px"
+                            style="width: 280px"
                             @search="doSearch"
                             @input="onSearchInput"
                         />
+                        <a-select v-model="apiSource" style="width: 120px">
+                            <a-option value="modrinth">Modrinth</a-option>
+                            <a-option value="curseforge">CurseForge</a-option>
+                        </a-select>
                         <a-select
-                            v-if="tags"
+                            v-if="tags && !isCurse()"
                             v-model="selectedLoader"
                             placeholder="加载器"
                             allow-clear
@@ -283,8 +434,7 @@ function iconUrl(url: string | null): string {
                         >
                             <a-option
                                 v-for="t in tags.loaders.filter(l => l.applicable_to.includes('projects'))"
-                                :key="t.name"
-                                :value="t.name"
+                                :key="t.name" :value="t.name"
                             >{{ t.name }}</a-option>
                         </a-select>
                         <a-select
@@ -296,14 +446,10 @@ function iconUrl(url: string | null): string {
                         >
                             <a-option
                                 v-for="t in tags.gameVersions"
-                                :key="t.name"
-                                :value="t.name"
+                                :key="t.name" :value="t.name"
                             >{{ t.name }}</a-option>
                         </a-select>
-                        <a-select
-                            v-model="sortIndex"
-                            style="width: 120px"
-                        >
+                        <a-select v-if="!isCurse()" v-model="sortIndex" style="width: 120px">
                             <a-option value="relevance">相关度</a-option>
                             <a-option value="downloads">下载量</a-option>
                             <a-option value="follows">关注数</a-option>
@@ -312,36 +458,26 @@ function iconUrl(url: string | null): string {
                         </a-select>
                     </div>
 
-                    <template v-if="searchResults">
+                    <template v-if="currentHits().length">
                         <div class="mod-results">
                             <a-card
-                                v-for="hit in searchResults.hits"
-                                :key="hit.project_id"
+                                v-for="hit in currentHits()"
+                                :key="hit.id"
                                 class="mod-hit-card"
                                 hoverable
-                                @click="openProject(hit.slug)"
+                                @click="openProject(hit.slugOrId)"
                             >
                                 <div class="mod-hit-content">
                                     <div class="mod-hit-icon">
-                                        <img
-                                            v-if="hit.icon_url"
-                                            :src="iconUrl(hit.icon_url)"
-                                            :alt="hit.title"
-                                        />
+                                        <img v-if="hit.iconUrl" :src="hit.iconUrl" :alt="hit.title" />
                                         <div v-else class="mod-hit-icon-empty"></div>
                                     </div>
                                     <div class="mod-hit-info">
                                         <div class="mod-hit-title">{{ hit.title }}</div>
                                         <div class="mod-hit-desc">{{ hit.description }}</div>
                                         <div class="mod-hit-meta">
-                                            <a-tag
-                                                v-for="cat in hit.display_categories"
-                                                :key="cat"
-                                                size="small"
-                                            >{{ cat }}</a-tag>
-                                            <span class="mod-hit-downloads">
-                                                {{ formatNumber(hit.downloads) }} 次下载
-                                            </span>
+                                            <a-tag v-for="cat in hit.categories" :key="cat" size="small">{{ cat }}</a-tag>
+                                            <span class="mod-hit-downloads">{{ formatNumber(hit.downloads) }} 次下载</span>
                                         </div>
                                     </div>
                                 </div>
@@ -349,8 +485,8 @@ function iconUrl(url: string | null): string {
                         </div>
 
                         <a-pagination
-                            v-if="searchResults.total_hits > pageSize"
-                            :total="searchResults.total_hits"
+                            v-if="totalHits() > pageSize"
+                            :total="totalHits()"
                             :page-size="pageSize"
                             :current="currentPage"
                             show-total
@@ -358,70 +494,54 @@ function iconUrl(url: string | null): string {
                             class="mod-pagination"
                         />
 
-                        <a-empty v-if="searchResults.hits.length === 0" description="没有找到模组" />
+                        <a-empty v-if="currentHits().length === 0" description="没有找到模组" />
                     </template>
                     <a-empty v-else description="搜索模组以开始" />
                 </template>
 
                 <!-- 详情态 -->
-                <template v-if="viewState === 'detail' && selectedProject">
+                <template v-if="viewState === 'detail' && projectInfo()">
                     <div class="mod-detail">
                         <a-button type="text" @click="backToBrowse" class="mod-back-btn">
                             &larr; 返回搜索结果
                         </a-button>
                         <div class="mod-detail-header">
                             <div class="mod-detail-icon">
-                                <img
-                                    v-if="selectedProject.icon_url"
-                                    :src="iconUrl(selectedProject.icon_url)"
-                                    :alt="selectedProject.title"
-                                />
+                                <img v-if="projectInfo()!.iconUrl" :src="projectInfo()!.iconUrl" :alt="projectInfo()!.title" />
                                 <div v-else class="mod-hit-icon-empty large"></div>
                             </div>
                             <div class="mod-detail-title">
-                                <h2>{{ selectedProject.title }}</h2>
-                                <div class="mod-detail-author">{{ selectedProject.description }}</div>
+                                <h2>{{ projectInfo()!.title }}</h2>
+                                <div class="mod-detail-author">{{ projectInfo()!.description }}</div>
                             </div>
                         </div>
                         <div class="mod-detail-stats">
-                            <span>{{ formatNumber(selectedProject.downloads) }} 次下载</span>
-                            <span>{{ formatNumber(selectedProject.followers) }} 个关注</span>
-                            <span>许可: {{ selectedProject.license.name }}</span>
+                            <span>{{ formatNumber(projectInfo()!.downloads) }} 次下载</span>
+                            <span v-if="projectInfo()!.followers > 0">{{ formatNumber(projectInfo()!.followers) }} 个关注</span>
+                            <span v-if="projectInfo()!.license">许可: {{ projectInfo()!.license }}</span>
                         </div>
-                        <div class="mod-detail-body" v-html="selectedProject.body" />
+                        <div v-if="projectInfo()!.body" class="mod-detail-body" v-html="projectInfo()!.body" />
                         <a-button type="primary" @click="loadVersions" style="margin-top: 16px">
-                            查看版本 ({{ selectedProject.versions.length }})
+                            查看文件 ({{ projectInfo()!.versionCount }})
                         </a-button>
                     </div>
                 </template>
 
-                <!-- 版本态 -->
-                <template v-if="viewState === 'versions'">
+                <!-- 版本态：Modrinth -->
+                <template v-if="viewState === 'versions' && !isCurse()">
                     <div class="mod-versions">
                         <a-button type="text" @click="backToDetail" class="mod-back-btn">
                             &larr; 返回模组详情
                         </a-button>
-                        <h3 v-if="selectedProject">版本列表 — {{ selectedProject.title }}</h3>
-                        <a-card
-                            v-for="ver in projectVersions"
-                            :key="ver.id"
-                            class="version-item"
-                        >
+                        <h3 v-if="modProject">版本列表 — {{ modProject.title }}</h3>
+                        <a-card v-for="ver in modVersions" :key="ver.id" class="version-item">
                             <div class="version-item-header">
                                 <div>
                                     <div class="version-item-name">
                                         {{ ver.name }}
                                         <a-tag size="small" color="arcoblue">{{ ver.version_number }}</a-tag>
-                                        <a-tag
-                                            v-if="ver.version_type === 'release'"
-                                            size="small"
-                                            color="green"
-                                        >Release</a-tag>
-                                        <a-tag
-                                            v-else-if="ver.version_type === 'beta'"
-                                            size="small"
-                                            color="orange"
-                                        >Beta</a-tag>
+                                        <a-tag v-if="ver.version_type === 'release'" size="small" color="green">Release</a-tag>
+                                        <a-tag v-else-if="ver.version_type === 'beta'" size="small" color="orange">Beta</a-tag>
                                         <a-tag v-else size="small">{{ ver.version_type }}</a-tag>
                                     </div>
                                     <div class="version-item-meta">
@@ -431,21 +551,44 @@ function iconUrl(url: string | null): string {
                                         <span>{{ new Date(Date.parse(ver.date_published)).toLocaleDateString() }}</span>
                                     </div>
                                 </div>
-                                <a-button type="primary" size="small" @click="downloadFile(ver)">
-                                    下载
-                                </a-button>
+                                <a-button type="primary" size="small" @click="downloadModFile(ver)">下载</a-button>
                             </div>
                             <div class="version-item-files">
-                                <div
-                                    v-for="f in ver.files"
-                                    :key="f.hashes.sha512"
-                                    class="version-item-file"
-                                >
+                                <div v-for="f in ver.files" :key="f.hashes.sha512" class="version-item-file">
                                     {{ f.filename }} ({{ formatFileSize(f.size) }})
                                 </div>
                             </div>
                         </a-card>
-                        <a-empty v-if="projectVersions.length === 0" description="没有版本" />
+                        <a-empty v-if="modVersions.length === 0" description="没有版本" />
+                    </div>
+                </template>
+
+                <!-- 版本态：CurseForge -->
+                <template v-if="viewState === 'versions' && isCurse()">
+                    <div class="mod-versions">
+                        <a-button type="text" @click="backToDetail" class="mod-back-btn">
+                            &larr; 返回模组详情
+                        </a-button>
+                        <h3 v-if="curseProject">文件列表 — {{ curseProject.name }}</h3>
+                        <a-card v-for="f in curseFiles" :key="f.id" class="version-item">
+                            <div class="version-item-header">
+                                <div>
+                                    <div class="version-item-name">
+                                        {{ f.displayName }}
+                                        <a-tag size="small" color="arcoblue">{{ f.fileName }}</a-tag>
+                                        <a-tag v-if="f.releaseType === 1" size="small" color="green">Release</a-tag>
+                                        <a-tag v-else-if="f.releaseType === 2" size="small" color="orange">Beta</a-tag>
+                                        <a-tag v-else-if="f.releaseType === 3" size="small" color="purple">Alpha</a-tag>
+                                    </div>
+                                    <div class="version-item-meta">
+                                        <span>{{ f.gameVersions?.join(', ') }}</span>
+                                        <span>{{ formatFileSize(f.fileLength) }}</span>
+                                    </div>
+                                </div>
+                                <a-button type="primary" size="small" @click="downloadCurseFile(f)" :disabled="!f.isAvailable">下载</a-button>
+                            </div>
+                        </a-card>
+                        <a-empty v-if="curseFiles.length === 0" description="没有文件" />
                     </div>
                 </template>
 
