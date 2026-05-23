@@ -1,19 +1,19 @@
 import {RPCSchema} from "electrobun";
 import {Config} from "@shared/config";
-import {VersionManifest} from "@shared/mojang";
+import {VersionManifest} from "@shared/api/mojang";
 import {
     ModSearchParams,
     ModSearchResponse,
     ModrinthProject,
     ModrinthVersion,
     ModTagsResponse,
-} from "@shared/modrinth";
+} from "@shared/api/modrinth";
 import {
     CurseSearchParams,
     CurseforgeSearchResponse,
     CurseforgeProject,
     CurseforgeFilesResponse,
-} from "@shared/curseforge";
+} from "@shared/api/curseforge";
 
 export interface AppRPCSchema extends RPCSchema {
     bun: {

@@ -6,7 +6,7 @@ import {
     ModSearchParams,
     ModSearchResponse,
     ModTagsResponse
-} from "../shared/modrinth";
+} from "@shared/api/modrinth";
 import {mkdirSync} from "node:fs";
 
 export class Modrinth {

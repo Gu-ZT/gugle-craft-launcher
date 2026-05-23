@@ -1,5 +1,5 @@
 import {AxiosInstance, create} from "axios";
-import {VersionManifest} from "@shared/mojang";
+import {VersionManifest} from "@shared/api/mojang";
 
 export class Mojang {
     private static readonly base_url: string = "https://launchermeta.mojang.com/";

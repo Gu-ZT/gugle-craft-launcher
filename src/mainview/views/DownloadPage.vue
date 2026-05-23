@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import {onMounted, ref, watch} from "vue";
-import {VersionManifestVersion} from "@shared/mojang";
+import {VersionManifestVersion} from "@shared/api/mojang";
 import {
     ModSearchParams,
     ModSearchResponse,
     ModrinthProject,
     ModrinthVersion,
     ModTagsResponse,
-} from "@shared/modrinth";
+} from "@shared/api/modrinth";
 import {
     CurseSearchParams,
     CurseforgeSearchResponse,
     CurseforgeProject,
     CurseforgeFile,
     CurseforgeFilesResponse,
-} from "@shared/curseforge";
+} from "@shared/api/curseforge";
 import {rpc} from "@renderer/scripts/rpc";
 import {Message} from "@arco-design/web-vue";
 

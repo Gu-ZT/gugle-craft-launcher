@@ -5,7 +5,7 @@ import type {
     CurseforgeFile,
     CurseforgeFilesResponse,
     CurseSearchParams,
-} from "../shared/curseforge";
+} from "@shared/api/curseforge";
 import {mkdirSync} from "node:fs";
 
 export class Curseforge {

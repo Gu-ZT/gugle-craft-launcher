@@ -3,23 +3,23 @@ import {AppRPCSchema} from "@shared/rpc-define";
 import {mainWindow} from "./index";
 import {Config, DownloadSource} from "@shared/config";
 import * as os from "node:os";
-import {Mojang} from "./mojang";
-import {Modrinth} from "./modrinth";
-import {Curseforge, mirrorApiUrl, mirrorDownloadUrl} from "./curseforge";
-import {VersionManifest} from "@shared/mojang";
+import {Mojang} from "./api/mojang";
+import {Modrinth} from "./api/modrinth";
+import {Curseforge, mirrorApiUrl, mirrorDownloadUrl} from "./api/curseforge";
+import {VersionManifest} from "@shared/api/mojang";
 import {
     ModSearchParams,
     ModSearchResponse,
     ModrinthProject,
     ModrinthVersion,
     ModTagsResponse,
-} from "@shared/modrinth";
+} from "@shared/api/modrinth";
 import {
     CurseSearchParams,
     CurseforgeSearchResponse,
     CurseforgeProject,
     CurseforgeFilesResponse,
-} from "@shared/curseforge";
+} from "@shared/api/curseforge";
 
 const mojang: Mojang = new Mojang();
 
