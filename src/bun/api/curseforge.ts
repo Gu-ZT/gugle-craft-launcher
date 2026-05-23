@@ -8,13 +8,20 @@ import type {
 } from "@shared/api/curseforge";
 import {mkdirSync} from "node:fs";
 
+const USER_AGENT = "GugleCraftLauncher/0.0.1 (electrobun)";
+const TIMEOUT = 30_000;
+
 export class Curseforge {
     private axios: AxiosInstance;
 
     constructor(baseUrl: string, apiKey?: string) {
         this.axios = create({
             baseURL: baseUrl,
-            headers: apiKey ? {"x-api-key": apiKey} : {},
+            timeout: TIMEOUT,
+            headers: {
+                "User-Agent": USER_AGENT,
+                ...(apiKey ? {"x-api-key": apiKey} : {}),
+            },
         });
     }
 
@@ -54,8 +61,8 @@ export class Curseforge {
     async downloadFile(downloadUrl: string, filename: string): Promise<string> {
         const response = await this.axios.get(downloadUrl, {
             responseType: "arraybuffer",
-            // 下载可能通过 CDN，不走 API base URL
             baseURL: "",
+            timeout: 120_000, // 下载超时 2 分钟
         });
         mkdirSync("./mods", {recursive: true});
         const outPath = `./mods/${filename}`;

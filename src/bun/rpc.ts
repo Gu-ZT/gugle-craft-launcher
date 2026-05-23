@@ -39,7 +39,14 @@ function getModrinthClient(config: Config): Modrinth {
 function getCurseforgeClient(config: Config): Curseforge {
     const source: DownloadSource = config.download_config.mod_source;
     const baseUrl = source === 'mirror' ? CURSEFORGE_MIRROR : CURSEFORGE_OFFICIAL;
-    return new Curseforge(baseUrl, config.download_config.curseforge_api_key);
+    const apiKey = config.download_config.curseforge_api_key;
+    // 官方源必须有 API Key，镜像源不需要
+    if (source !== 'mirror' && !apiKey) {
+        throw new Error(
+            "CurseForge 官方 API 需要 API Key。请在设置中填写 curseforge_api_key，或切换到镜像源（mirror）"
+        );
+    }
+    return new Curseforge(baseUrl, apiKey);
 }
 
 async function exit(): Promise<void> {
@@ -133,17 +140,29 @@ async function getModTags(): Promise<ModTagsResponse> {
 
 async function searchCurseMods(params: CurseSearchParams): Promise<CurseforgeSearchResponse> {
     const config = await getConfig();
-    return await getCurseforgeClient(config).search(params);
+    try {
+        return await getCurseforgeClient(config).search(params);
+    } catch (e: any) {
+        throw new Error(e?.message ?? "CurseForge 搜索失败");
+    }
 }
 
 async function getCurseProject(params: { projectId: number }): Promise<CurseforgeProject> {
     const config = await getConfig();
-    return await getCurseforgeClient(config).getProject(params.projectId);
+    try {
+        return await getCurseforgeClient(config).getProject(params.projectId);
+    } catch (e: any) {
+        throw new Error(e?.message ?? "获取 CurseForge 项目信息失败");
+    }
 }
 
 async function getCurseFiles(params: { projectId: number }): Promise<CurseforgeFilesResponse> {
     const config = await getConfig();
-    return await getCurseforgeClient(config).getFiles(params.projectId);
+    try {
+        return await getCurseforgeClient(config).getFiles(params.projectId);
+    } catch (e: any) {
+        throw new Error(e?.message ?? "获取 CurseForge 文件列表失败");
+    }
 }
 
 async function downloadCurseFile(
