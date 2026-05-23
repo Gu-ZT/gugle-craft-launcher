@@ -28,25 +28,59 @@ const MODRINTH_MIRROR = "https://mod.mcimirror.top/modrinth/v2";
 const CURSEFORGE_OFFICIAL = "https://api.curseforge.com/v1";
 const CURSEFORGE_MIRROR = "https://mod.mcimirror.top/curseforge/v1";
 
-/** 根据配置选择 API 源并创建 Modrinth 客户端 */
-function getModrinthClient(config: Config): Modrinth {
+/** Modrinth API 调用，根据 source 决定使用官方/镜像/优先官方回退 */
+async function withModrinth<T>(
+    config: Config,
+    fn: (client: Modrinth) => Promise<T>,
+): Promise<T> {
     const source: DownloadSource = config.download_config.mod_source;
+
+    if (source === 'official_preference') {
+        try {
+            return await fn(new Modrinth(MODRINTH_OFFICIAL));
+        } catch (e1: any) {
+            console.log("[Modrinth] 官方源失败，回退到镜像源:", e1?.message);
+            return await fn(new Modrinth(MODRINTH_MIRROR));
+        }
+    }
+
     const baseUrl = source === 'mirror' ? MODRINTH_MIRROR : MODRINTH_OFFICIAL;
-    return new Modrinth(baseUrl);
+    return await fn(new Modrinth(baseUrl));
 }
 
-/** 根据配置选择 API 源并创建 CurseForge 客户端 */
-function getCurseforgeClient(config: Config): Curseforge {
+/** CurseForge API 调用，根据 source 决定使用官方/镜像/优先官方回退 */
+async function withCurseforge<T>(
+    config: Config,
+    fn: (client: Curseforge) => Promise<T>,
+): Promise<T> {
     const source: DownloadSource = config.download_config.mod_source;
-    const baseUrl = source === 'mirror' ? CURSEFORGE_MIRROR : CURSEFORGE_OFFICIAL;
     const apiKey = config.download_config.curseforge_api_key;
-    // 官方源必须有 API Key，镜像源不需要
-    if (source !== 'mirror' && !apiKey) {
+
+    if (source === 'official_preference') {
+        // 有 API Key 时先试官方
+        if (apiKey) {
+            try {
+                return await fn(new Curseforge(CURSEFORGE_OFFICIAL, apiKey));
+            } catch (e1: any) {
+                console.log("[CurseForge] 官方源失败，回退到镜像源:", e1?.message);
+                return await fn(new Curseforge(CURSEFORGE_MIRROR));
+            }
+        }
+        // 无 API Key 直接走镜像
+        return await fn(new Curseforge(CURSEFORGE_MIRROR));
+    }
+
+    if (source === 'mirror') {
+        return await fn(new Curseforge(CURSEFORGE_MIRROR));
+    }
+
+    // official
+    if (!apiKey) {
         throw new Error(
             "CurseForge 官方 API 需要 API Key。请在设置中填写 curseforge_api_key，或切换到镜像源（mirror）"
         );
     }
-    return new Curseforge(baseUrl, apiKey);
+    return await fn(new Curseforge(CURSEFORGE_OFFICIAL, apiKey));
 }
 
 async function exit(): Promise<void> {
@@ -97,17 +131,17 @@ async function getVersionManifest(): Promise<VersionManifest> {
 
 async function searchMods(params: ModSearchParams): Promise<ModSearchResponse> {
     const config = await getConfig();
-    return await getModrinthClient(config).search(params);
+    return await withModrinth(config, c => c.search(params));
 }
 
 async function getModProject(params: { slug: string }): Promise<ModrinthProject> {
     const config = await getConfig();
-    return await getModrinthClient(config).getProject(params.slug);
+    return await withModrinth(config, c => c.getProject(params.slug));
 }
 
 async function getModVersions(params: { slug: string }): Promise<ModrinthVersion[]> {
     const config = await getConfig();
-    return await getModrinthClient(config).getVersions(params.slug);
+    return await withModrinth(config, c => c.getVersions(params.slug));
 }
 
 async function downloadModFile(
@@ -115,17 +149,15 @@ async function downloadModFile(
 ): Promise<{ success: boolean; path?: string; error?: string }> {
     try {
         const config = await getConfig();
-        const client = getModrinthClient(config);
-        const version = await client.getVersion(params.versionId);
-        const file = version.files.find((f) => f.filename === params.filename) ?? version.files[0];
-        if (!file) {
-            return {success: false, error: "No file found in version"};
-        }
-        // 根据配置决定是否使用 MCIMirror 下载 CDN
-        const downloadUrl = config.download_config.mod_source === 'mirror'
-            ? mirrorDownloadUrl(file.url) : file.url;
-        const path = await client.downloadFile(downloadUrl, file.filename);
-        return {success: true, path};
+        const result = await withModrinth(config, async (client) => {
+            const version = await client.getVersion(params.versionId);
+            const file = version.files.find((f) => f.filename === params.filename) ?? version.files[0];
+            if (!file) throw new Error("No file found in version");
+            const downloadUrl = config.download_config.mod_source === 'mirror'
+                ? mirrorDownloadUrl(file.url) : file.url;
+            return await client.downloadFile(downloadUrl, file.filename);
+        });
+        return {success: true, path: result};
     } catch (e: any) {
         return {success: false, error: e?.message ?? String(e)};
     }
@@ -133,36 +165,24 @@ async function downloadModFile(
 
 async function getModTags(): Promise<ModTagsResponse> {
     const config = await getConfig();
-    return await getModrinthClient(config).getTags();
+    return await withModrinth(config, c => c.getTags());
 }
 
 // ---- CurseForge handlers ----
 
 async function searchCurseMods(params: CurseSearchParams): Promise<CurseforgeSearchResponse> {
     const config = await getConfig();
-    try {
-        return await getCurseforgeClient(config).search(params);
-    } catch (e: any) {
-        throw new Error(e?.message ?? "CurseForge 搜索失败");
-    }
+    return await withCurseforge(config, c => c.search(params));
 }
 
 async function getCurseProject(params: { projectId: number }): Promise<CurseforgeProject> {
     const config = await getConfig();
-    try {
-        return await getCurseforgeClient(config).getProject(params.projectId);
-    } catch (e: any) {
-        throw new Error(e?.message ?? "获取 CurseForge 项目信息失败");
-    }
+    return await withCurseforge(config, c => c.getProject(params.projectId));
 }
 
 async function getCurseFiles(params: { projectId: number }): Promise<CurseforgeFilesResponse> {
     const config = await getConfig();
-    try {
-        return await getCurseforgeClient(config).getFiles(params.projectId);
-    } catch (e: any) {
-        throw new Error(e?.message ?? "获取 CurseForge 文件列表失败");
-    }
+    return await withCurseforge(config, c => c.getFiles(params.projectId));
 }
 
 async function downloadCurseFile(
@@ -170,12 +190,12 @@ async function downloadCurseFile(
 ): Promise<{ success: boolean; path?: string; error?: string }> {
     try {
         const config = await getConfig();
-        // MCIMirror 下载 CDN 映射
-        const downloadUrl = config.download_config.mod_source === 'mirror'
-            ? mirrorDownloadUrl(params.downloadUrl) : params.downloadUrl;
-        const client = getCurseforgeClient(config);
-        const path = await client.downloadFile(downloadUrl, params.filename);
-        return {success: true, path};
+        const result = await withCurseforge(config, async (client) => {
+            const downloadUrl = config.download_config.mod_source === 'mirror'
+                ? mirrorDownloadUrl(params.downloadUrl) : params.downloadUrl;
+            return await client.downloadFile(downloadUrl, params.filename);
+        });
+        return {success: true, path: result};
     } catch (e: any) {
         return {success: false, error: e?.message ?? String(e)};
     }
