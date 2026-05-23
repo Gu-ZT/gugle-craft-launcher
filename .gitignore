@@ -5,3 +5,4 @@ artifacts/
 *.tsbuildinfo
 *.exe
 .idea/
+ref/

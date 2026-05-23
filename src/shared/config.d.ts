@@ -4,6 +4,7 @@ export type VersionSource = DownloadSource;
 export interface DownloadConfig {
     download_source: DownloadSource;
     version_source: VersionSource;
+    mod_source: DownloadSource;
 }
 
 export type VersionIsolation = 'all' | 'none' | 'mod' | 'informal' | 'mod_informal';
